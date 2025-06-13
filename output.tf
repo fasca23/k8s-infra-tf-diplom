@@ -2,6 +2,10 @@ output "external_ip_addresses" {
   value = local.external_ips
 }
 
+output "internal_ip_addresses" {
+  value = [yandex_compute_instance.cluster-k8s.*.network_interface.0.ip_address]
+}
+
 output "hostnames" {
   value = local.hostnames
 }
