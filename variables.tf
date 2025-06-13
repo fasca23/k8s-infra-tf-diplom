@@ -31,7 +31,7 @@ variable "subnet-zones" {
 }
 
 variable "cidr" {
-  type    = map(list(string))
+  type = map(list(string))
   default = {
     stage = ["10.10.1.0/24", "10.10.2.0/24", "10.10.3.0/24"]
   }
@@ -62,7 +62,7 @@ variable "instance_memory" {
 
 variable "cluster_size" {
   description = "Количество нод кластера"
-  default = 3
+  default     = 3
 }
 
 #  Для работы CI/CD Terraform через GitHub Actions Workflow
