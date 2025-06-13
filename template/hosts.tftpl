@@ -1,0 +1,43 @@
+all:
+  hosts:
+%{ for node in master_nodes ~}
+    ${node.name}:
+      ansible_host: ${node.network_interface[0].nat_ip_address}
+      ansible_user: ubuntu
+      ip: ${node.network_interface[0].ip_address}
+      access_ip: ${node.network_interface[0].nat_ip_address}
+%{ endfor ~}
+%{ for node in worker_nodes ~}
+    ${node.name}:
+      ansible_host: ${node.network_interface[0].nat_ip_address}
+      ansible_user: ubuntu
+      ip: ${node.network_interface[0].ip_address}
+      access_ip: ${node.network_interface[0].nat_ip_address}
+%{ endfor ~}
+
+  children:
+    kube_control_plane:
+      hosts:
+%{ for node in master_nodes ~}
+        ${node.name}:
+%{ endfor ~}
+
+    kube_node:
+      hosts:
+%{ for node in worker_nodes ~}
+        ${node.name}:
+%{ endfor ~}
+
+    etcd:
+      hosts:
+%{ for node in master_nodes ~}
+        ${node.name}:
+%{ endfor ~}
+
+    k8s_cluster:
+      children:
+        kube_control_plane:
+        kube_node:
+
+    calico_rr:
+      hosts: {}

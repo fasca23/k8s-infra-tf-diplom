@@ -1,0 +1,12 @@
+personal.auto.tfvars
+terraform.tfstate
+.terraform.lock.hcl
+.terraform
+internal_ssh_key
+terraform.tfstate.backup
+errored.tfstate
+_providers.tf
+test-app
+k8s-spray
+security_groups.tf
+k8s-settings/kubeconfig-github-actions.yaml
