@@ -15,7 +15,7 @@ resource "yandex_compute_instance" "cluster-k8s" {
   # Используем прерываемые инстансы для экономии
   scheduling_policy {
     # preemptible = true
-    preemptible = count.index <= 2 ? false : true
+    preemptible = count.index <= 1 ? false : true
   }
 
   # Ресурсы ВМ (Ядра и память)
