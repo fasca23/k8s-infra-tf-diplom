@@ -39,13 +39,6 @@ jobs:
         with:
           terraform_version: "1.9.5"
 
-      - name: Configure AWS credentials (for Yandex S3)
-        uses: aws-actions/configure-aws-credentials@v3
-        with:
-          aws-access-key-id: ${{ secrets.YC_S3_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.YC_S3_SECRET_KEY }}
-          aws-region: ru-central1
-
       - name: Terraform Init
         run: |
           terraform init \
