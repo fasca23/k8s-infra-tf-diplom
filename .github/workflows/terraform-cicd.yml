@@ -76,8 +76,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kubespray-inventory
-          path: ../k8s-spray/kubespray/inventory/hosts.yaml
-          retention-days: 1  # Срок хранения артефактов уменьшил для безопсности
+          path: k8s-spray/kubespray/inventory/hosts.yaml
+          retention-days: 1  # Срок хранения артефактов уменьшил для безопасности
 
   kubespray:
     name: 'Развертывание Kubernetes'
