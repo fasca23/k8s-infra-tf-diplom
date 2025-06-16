@@ -73,7 +73,7 @@ jobs:
 
       - name: Сохранение inventory-файла как артефакта
         if: success() && (github.event.inputs.action == 'apply' || github.event.inputs.action == 'deploy-k8s')
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kubespray-inventory
           path: ../k8s-spray/kubespray/inventory/hosts.yaml
@@ -88,7 +88,7 @@ jobs:
     
     steps:
       - name: Получение inventory-файла
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: kubespray-inventory
           path: inventory/mycluster/
@@ -125,7 +125,7 @@ jobs:
 
       - name: Сохранение kubeconfig
         if: success()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kubeconfig
           path: inventory/mycluster/artifacts/admin.conf
@@ -137,7 +137,7 @@ jobs:
         continue-on-error: true  # Продолжить при ошибках
 
       - name: Получение информации о кластере
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cluster-info
           path: cluster-info.txt
