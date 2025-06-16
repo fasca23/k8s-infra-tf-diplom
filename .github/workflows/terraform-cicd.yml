@@ -76,8 +76,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kubespray-inventory
-          path: k8s-spray/kubespray/inventory/hosts.yaml
+          path: kubespray/inventory/hosts.yaml
           retention-days: 1  # Срок хранения артефактов уменьшил для безопасности
+          if-no-files-found: error  # при отсутствии файла
 
   kubespray:
     name: 'Развертывание Kubernetes'
