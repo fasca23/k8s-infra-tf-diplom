@@ -1,4 +1,4 @@
-name: Terraform + Kubespray CI/CD
+name: Terraform CI/CD
 
 on:
   workflow_dispatch:
@@ -11,7 +11,6 @@ on:
           - plan
           - apply
           - destroy
-          - deploy-k8s
       confirm:
         description: 'Введите «yes» для подтверждения (требуется для apply/destroy/deploy-k8s)'
         required: false
@@ -77,5 +76,5 @@ jobs:
         with:
           name: kubespray-inventory
           path: kubespray/inventory/hosts.yaml
-          retention-days: 1  # Срок хранения артефактов уменьшил для безопасности
+          retention-days: 1  # Срок хранения артефакта уменьшил для безопасности
           if-no-files-found: error  # при отсутствии файла
