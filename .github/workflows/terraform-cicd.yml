@@ -1,24 +1,25 @@
-name: Terraform CI/CD
+name: Terraform + Kubespray CI/CD
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Terraform action (plan/apply/destroy)'
+        description: 'Action (plan/apply/destroy/deploy-k8s)'
         required: true
         type: choice
         options:
           - plan
           - apply
           - destroy
+          - deploy-k8s
       confirm:
-        description: 'Type "yes" to confirm (required for apply/destroy)'
+        description: 'Введите «yes» для подтверждения (требуется для apply/destroy/deploy-k8s)'
         required: false
         default: 'no'
 
 jobs:
   terraform:
-    name: 'Terraform'
+    name: 'Terraform инфраструктура'
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -31,41 +32,113 @@ jobs:
       TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
     steps:
-      - name: Checkout repository
+      - name: Получение кода
         uses: actions/checkout@v4
 
-      - name: Setup Terraform
+      - name: Установка Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.5"
 
-      - name: Terraform Init
+      - name: Инициализация Terraform
         run: |
           terraform init \
-            -backend-config="endpoint=https://storage.yandexcloud.net"  \
+            -backend-config="endpoint=https://storage.yandexcloud.net" \
             -backend-config="bucket=${{ secrets.YC_S3_BUCKET_NAME }}" \
             -backend-config="region=ru-central1" \
             -backend-config="access_key=${{ secrets.YC_S3_ACCESS_KEY }}" \
             -backend-config="secret_key=${{ secrets.YC_S3_SECRET_KEY }}"
 
-      - name: Terraform Format
-        run: terraform fmt -check
+      - name: Проверка форматировани
+        run: terraform fmt -check -recursive  # Добавлен -recursive для проверки всех файлов
 
-      - name: Terraform Validate
+      - name: Валидация конфигурации
         run: terraform validate
 
-      - name: Terraform Plan
+      - name: Планирование изменений
         if: github.event.inputs.action == 'plan' || (github.event.inputs.action == 'apply' && github.event.inputs.confirm == 'yes')
         run: terraform plan -out=tfplan
 
-      - name: Terraform Apply
+      - name: Применение изменений
         if: github.event.inputs.action == 'apply' && github.event.inputs.confirm == 'yes'
         run: terraform apply -auto-approve tfplan
 
-      - name: Terraform Destroy Plan
+      - name: План удаления
         if: github.event.inputs.action == 'destroy' && github.event.inputs.confirm == 'yes'
         run: terraform plan -destroy -out=tfdestroy
 
-      - name: Terraform Destroy
+      - name: Удаление инфраструктуры
         if: github.event.inputs.action == 'destroy' && github.event.inputs.confirm == 'yes'
         run: terraform apply -auto-approve tfdestroy
+
+      - name: Сохранение inventory-файла как артефакта
+        if: success() && (github.event.inputs.action == 'apply' || github.event.inputs.action == 'deploy-k8s')
+        uses: actions/upload-artifact@v3
+        with:
+          name: kubespray-inventory
+          path: ../k8s-spray/kubespray/inventory/hosts.yaml
+          retention-days: 1  # Срок хранения артефактов уменьшил для безопсности
+
+  kubespray:
+    name: 'Развертывание Kubernetes'
+    needs: terraform
+    runs-on: ubuntu-latest
+    # timeout-minutes: 120  # Увеличенный таймаут для больших кластеров
+    if: github.event.inputs.action == 'deploy-k8s' || (github.event.inputs.action == 'apply' && github.event.inputs.confirm == 'yes')
+    
+    steps:
+      - name: Получение inventory-файла
+        uses: actions/download-artifact@v3
+        with:
+          name: kubespray-inventory
+          path: inventory/mycluster/
+
+      - name: Кэширование Kubespray
+        uses: actions/cache@v3
+        with:
+          path: kubespray
+          key: kubespray-${{ hashFiles('kubespray/requirements.txt') }}
+          restore-keys: |
+            kubespray-
+
+      - name: Получение Kubespray
+        uses: actions/checkout@v4
+        with:
+          repository: 'kubernetes-sigs/kubespray'
+          path: kubespray
+          ref: 'v2.24.0'
+
+      - name: Установить зависимости
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip sshpass
+          pip3 install --cache-dir .pip-cache ansible==9.3.0
+          pip3 install --cache-dir .pip-cache -r kubespray/requirements.txt
+
+      - name: Запуск Kubespray
+        run: |
+          ansible-playbook -i inventory/mycluster/hosts.yaml \
+            kubespray/cluster.yml \
+            -b -v \
+            --private-key ${{ secrets.SSH_PRIVATE_KEY }} \
+            --ssh-common-args="-o StrictHostKeyChecking=no"
+
+      - name: Сохранение kubeconfig
+        if: success()
+        uses: actions/upload-artifact@v3
+        with:
+          name: kubeconfig
+          path: inventory/mycluster/artifacts/admin.conf
+          retention-days: 1  # Уменьшил срок хранения для безопасности
+
+      - name: Сохранение информации о кластере
+        run: |
+          kubectl --kubeconfig=inventory/mycluster/artifacts/admin.conf cluster-info > cluster-info.txt
+        continue-on-error: true  # Продолжить при ошибках
+
+      - name: Получение информации о кластере
+        uses: actions/upload-artifact@v3
+        with:
+          name: cluster-info
+          path: cluster-info.txt
+          retention-days: 1  # Краткосрочное хранение для безопасности

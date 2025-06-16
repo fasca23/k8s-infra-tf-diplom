@@ -10,3 +10,4 @@ test-app
 k8s-spray
 security_groups.tf
 k8s-settings/kubeconfig-github-actions.yaml
+_terraform-cicd.yml
