@@ -11,6 +11,7 @@ on:
           - plan
           - apply
           - destroy
+          - deploy-k8s
       confirm:
         description: 'Введите «yes» для подтверждения (требуется для apply/destroy/deploy-k8s)'
         required: false
@@ -78,3 +79,33 @@ jobs:
           path: kubespray/inventory/hosts.yaml
           retention-days: 1  # Срок хранения артефакта уменьшил для безопасности
           if-no-files-found: error  # при отсутствии файла
+      - name: 🚀 Установка Kubernetes через Kubespray
+        if: github.event.inputs.action == 'deploy-k8s' && github.event.inputs.confirm == 'yes'
+        run: |
+          echo "Установка зависимостей"
+          sudo apt update && sudo apt install -y python3-pip sshpass git
+          pip3 install ansible
+
+          echo "Клонирование Kubespray"
+          git clone https://github.com/kubernetes-sigs/kubespray.git 
+          cd kubespray
+          pip3 install -r requirements.txt
+
+          echo "Загрузка inventory из артефакта"
+          cp ../kubespray/inventory/hosts.yaml inventory/
+
+          echo "Настройка SSH-ключа"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          echo "Тест SSH-подключения ко всем хостам"
+          for host in $(grep -E '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' inventory/hosts.yaml | awk '{print $1}'); do
+            echo "🔌 Проверяем подключение к $host"
+            ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@$host "echo OK" || exit 1
+          done
+
+          echo "Запуск Kubespray Playbook"
+          ansible-playbook -i inventory/hosts.yaml cluster.yml --private-key=~/.ssh/id_rsa -u ubuntu
+
+          echo "✅ Установка Kubernetes завершена!"
