@@ -266,14 +266,35 @@ jobs:
           name: kubeconfig-encrypted
           path: ./kubespray/
 
-      - name: 🔓 Расшифровка kubeconfig
+      - name: 📥 Загрузка inventory из артефакта
+        uses: actions/download-artifact@v4
+        with:
+          name: kubespray-inventory
+          path: kubespray/inventory
+
+      - name: Проверка inventory-файла
         run: |
-          # Получаем IP мастер-ноды
-          if [ -z "$MASTER_NODE" ]; then
-            echo "::error::Не удалось найти IP мастер-ноды в inventory"
+          if [ ! -f "kubespray/inventory/hosts.yaml" ]; then
+            echo "::error::Inventory file not found at kubespray/inventory/hosts.yaml"
+            echo "Available files:"
+            ls -R kubespray || true
             exit 1
           fi
+          echo "Inventory file verified:"
+          cat kubespray/inventory/hosts.yaml
+    
 
+      - name: 🔓 Расшифровка kubeconfig
+        run: |
+          # Получаем первый IP из hosts.yaml
+          MASTER_NODE=$(yq eval '.all.hosts.*.ansible_host' ../kubespray/inventory/hosts.yaml | head -n1)
+
+          # Проверяем, что IP найден
+          if [ -z "$MASTER_NODE" ]; then
+            echo "::error::Не удалось найти ни одного хоста в inventory"
+            exit 1
+          fi
+          
           # Расшифровываем kubeconfig
           echo "${{ secrets.GPG_PRIVATE_KEY }}" > private.key
           gpg --import private.key
