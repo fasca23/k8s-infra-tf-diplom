@@ -112,14 +112,28 @@ jobs:
           pip3 install ansible
 
           echo "📁 Шаг 2: Подготовка Kubespray"
+          # Сохраняем inventory файл если он существует
+          if [ -f "kubespray/inventory/hosts.yaml" ]; then
+            echo "Сохраняем существующий inventory файл"
+            mkdir -p /tmp/kubespray-backup
+            cp kubespray/inventory/hosts.yaml /tmp/kubespray-backup/
+          fi
+          
+          # Удаляем старую директорию kubespray (кроме inventory)
           if [ -d "kubespray" ]; then
-            echo "Обновляем существующую копию Kubespray"
-            cd kubespray
-            git pull
-          else
-            echo "Клонируем Kubespray"
-            git clone https://github.com/kubernetes-sigs/kubespray.git
-            cd kubespray
+            echo "Удаляем старую версию Kubespray"
+            rm -rf kubespray
+          fi
+          
+          echo "Клонируем свежую версию Kubespray"
+          git clone https://github.com/kubernetes-sigs/kubespray.git
+          cd kubespray
+          
+          # Восстанавливаем inventory если он был сохранен
+          if [ -f "/tmp/kubespray-backup/hosts.yaml" ]; then
+            echo "Восстанавливаем inventory файл"
+            mkdir -p inventory
+            cp /tmp/kubespray-backup/hosts.yaml inventory/
           fi
           
           echo "📦 Установка зависимостей Python"
@@ -131,13 +145,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
 
           echo "🌐 Шаг 4: Тест SSH-подключения"
-          ansible -i ../kubespray/inventory/hosts.yaml all -m ping --private-key=~/.ssh/id_rsa -u ubuntu || {
+          ansible -i inventory/hosts.yaml all -m ping --private-key=~/.ssh/id_rsa -u ubuntu || {
             echo "::error::SSH connection failed"
             exit 1
           }
 
           echo "🔥 Шаг 5: Запуск Kubespray Playbook"
-          ansible-playbook -i ../kubespray/inventory/hosts.yaml cluster.yml \
+          ansible-playbook -i inventory/hosts.yaml cluster.yml \
             --private-key=~/.ssh/id_rsa \
             -u ubuntu \
             -b \
@@ -148,5 +162,6 @@ jobs:
 
           echo "🧹 Шаг 6: Очистка"
           rm -f ~/.ssh/id_rsa
+          rm -rf /tmp/kubespray-backup
 
           echo "✅ Установка Kubernetes завершена!"
