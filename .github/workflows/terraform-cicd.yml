@@ -252,3 +252,66 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  deploy-monitoring:
+    name: 'Установка мониторинга'
+    needs: deploy-k8s
+    if: github.event.inputs.action == 'apply-and-deploy' && github.event.inputs.confirm == 'yes'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: 📥 Загрузка kubeconfig
+        uses: actions/download-artifact@v4
+        with:
+          name: kubeconfig-encrypted
+          path: ./kubespray/
+
+      - name: 🔓 Расшифровка kubeconfig
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" > private.key
+          gpg --import private.key
+          gpg --output ./kubeconfig.yaml --decrypt ./kubespray/kubeconfig.gpg
+          rm private.key
+          mkdir -p ~/.kube
+          cp ./kubeconfig.yaml ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: 🛠 Установка Helm и Kubectl
+        run: |
+          curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
+          sudo apt-get install apt-transport-https --yes
+          echo "deb https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+          sudo apt-get update
+          sudo apt-get install helm kubectl --yes
+
+      - name: 🔍 Проверка доступа к кластеру
+        run: kubectl cluster-info
+
+      - name: 📦 Добавление репозитория Helm
+        run: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+      - name: 🔄 Обновление репозиториев Helm
+        run: helm repo update
+
+      - name: 🚀 Установка kube-prometheus-stack
+        run: |
+          helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --create-namespace \
+            --set grafana.adminPassword="admin" \
+            --atomic --wait
+
+      - name: 📂 Применение дополнительных манифестов
+        run: |
+          cd k8s-settings
+          kubectl apply -f grafana-nodeport.yaml
+          kubectl apply -f deployment-account.yaml
+          kubectl apply -f rbac.yaml
+          kubectl apply -f sa-with-secret.yaml
+
+      - name: 🌐 Проверка установленных ресурсов
+        run: |
+          kubectl get pods -n monitoring
+          kubectl get svc -n monitoring
+          echo "Grafana доступна по NodePort: $(kubectl get svc -n monitoring | grep grafana-nodeport | awk '{print $5}')"
+
