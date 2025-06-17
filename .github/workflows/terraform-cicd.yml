@@ -157,10 +157,11 @@ jobs:
           done
 
           echo "🔍 Шаг 5: Проверка существующего кластера"
-              MASTER_NODE=$(yq eval '.all.hosts | map(select(contains("master") or contains("control"))) | .[0]' ../kubespray/inventory/hosts.yaml)
+              MASTER_NODE=$(yq eval '.all.hosts | map(select(has("etcd") or has("kube-control-plane"))) | .[0].ansible_host' ../kubespray/inventory/hosts.yaml)
               if ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo kubectl get nodes"; then
                 echo "✅ Кластер Kubernetes уже установлен и работает"
                 
+
                 echo "📋 Получение kubeconfig уже работающего кластера"
                 ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo cat /etc/kubernetes/admin.conf" > kubeconfig.yaml
                 
