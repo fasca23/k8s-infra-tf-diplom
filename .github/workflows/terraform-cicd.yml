@@ -71,19 +71,6 @@ jobs:
         if: github.event.inputs.action == 'destroy' && github.event.inputs.confirm == 'yes'
         run: terraform apply -auto-approve tfdestroy
 
-      - name: Проверка и сохранение inventory-файла
-        if: success() && (github.event.inputs.action == 'apply' || github.event.inputs.action == 'deploy-k8s')
-        run: |
-          if [ -f "inventory/hosts.yaml" ]; then
-            mkdir -p kubespray/inventory
-            cp inventory/hosts.yaml kubespray/inventory/hosts.yaml
-          elif [ -f "kubespray/inventory/hosts.yaml" ]; then
-            echo "Inventory file already in kubespray directory"
-          else
-            echo "::warning::Inventory file not found in either inventory/hosts.yaml or kubespray/inventory/hosts.yaml"
-            exit 0
-          fi
-
       - name: Сохранение inventory-файла как артефакта
         if: success() && (github.event.inputs.action == 'apply' || github.event.inputs.action == 'deploy-k8s')
         uses: actions/upload-artifact@v4
