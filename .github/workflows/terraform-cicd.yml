@@ -226,11 +226,29 @@ jobs:
             echo "Файл kubeconfig.yaml найден."
           fi        
 
-      - name: 📤 Сохранение kubeconfig как артефакта
+      - name: 🔒 Шифрование kubeconfig
+        run: |
+          # Устанавливаем GPG
+          sudo apt-get update && sudo apt-get install -y gnupg
+
+          # Импортируем ключ из секрета
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --import
+          
+          # Шифруем файл
+          gpg --encrypt --recipient "k8s-admin" --trust-model always --output ./kubespray/kubeconfig.gpg ./kubespray/kubeconfig.yaml
+          
+          # Проверяем что файл зашифрован
+          if [ ! -f ./kubespray/kubeconfig.gpg ]; then
+            echo "::error::Не удалось зашифровать kubeconfig"
+            exit 1
+          fi
+          echo "Файл успешно зашифрован"
+
+      - name: 📤 Сохранение зашифрованного kubeconfig
         uses: actions/upload-artifact@v4
         with:
-          name: kubeconfig
-          path: ./kubespray/kubeconfig.yaml
+          name: kubeconfig-encrypted
+          path: ./kubespray/kubeconfig.gpg
           retention-days: 1
           if-no-files-found: error
 
