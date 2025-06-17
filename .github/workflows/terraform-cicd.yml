@@ -156,17 +156,55 @@ jobs:
             }
           done
 
-          echo "🔥 Шаг 5: Запуск Kubespray Playbook"
-          ansible-playbook -i ../kubespray/inventory/hosts.yaml cluster.yml \
-            --private-key=~/.ssh/id_rsa \
-            -u ubuntu \
-            -b \
-            --become-user=root \
-            --ssh-common-args="-o StrictHostKeyChecking=no" || {
-              echo "::error::Ошибка развертывания Kubernetes"
-              exit 1
-            }
+          echo "🔍 Шаг 5: Проверка существующего кластера"
+              MASTER_NODE=$(yq eval '.all.hosts.*.ansible_host | select(. == "*master*" or . == "*control*") | .[0]' ../kubespray/inventory/hosts.yaml)
+              if ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo kubectl get nodes"; then
+                echo "✅ Кластер Kubernetes уже установлен и работает"
+                
+                echo "📋 Получение kubeconfig уже работающего кластера"
+                ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo cat /etc/kubernetes/admin.conf" > kubeconfig.yaml
+                
+                echo "🔒 Настройка прав доступа к kubeconfig"
+                chmod 600 kubeconfig.yaml
+                
+                mkdir -p ~/.kube
+                cp kubeconfig.yaml ~/.kube/config
+                
+                echo "🧹 Шаг 6: Очистка"
+                rm -f ~/.ssh/id_rsa
+                exit 0
+              fi
 
-          echo "🧹 Шаг 6: Очистка"
-          rm -f ~/.ssh/id_rsa
-          echo "✅ Установка Kubernetes завершена!"
+              echo "🔥 Шаг 6: Запуск Kubespray Playbook (только если кластер не обнаружен)"
+              ansible-playbook -i ../kubespray/inventory/hosts.yaml cluster.yml \
+                --private-key=~/.ssh/id_rsa \
+                -u ubuntu \
+                -b \
+                --become-user=root \
+                --ssh-common-args="-o StrictHostKeyChecking=no" || {
+                  echo "::error::Ошибка развертывания Kubernetes"
+                  exit 1
+                }
+
+              echo "📋 Шаг 7: Получение kubeconfig"
+              MASTER_NODE=$(yq eval '.all.hosts.*.ansible_host | select(. == "*master*" or . == "*control*") | .[0]' ../kubespray/inventory/hosts.yaml)
+              ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo cat /etc/kubernetes/admin.conf" > kubeconfig.yaml
+              
+              echo "🔒 Настройка прав доступа к kubeconfig"
+              chmod 600 kubeconfig.yaml
+              
+              mkdir -p ~/.kube
+              cp kubeconfig.yaml ~/.kube/config
+              
+              echo "🧹 Шаг 8: Очистка"
+              rm -f ~/.ssh/id_rsa
+              echo "✅ Установка Kubernetes завершена!"
+              
+      - name: 📤 Сохранение kubeconfig как артефакта
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubeconfig
+          path: kubeconfig.yaml
+          retention-days: 1
+          if-no-files-found: error
+
