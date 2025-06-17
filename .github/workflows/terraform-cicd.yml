@@ -180,6 +180,7 @@ jobs:
                 
                 echo "🧹 Шаг 6: Очистка"
                 rm -f ~/.ssh/id_rsa
+                exit 0
               fi
 
               echo "🔥 Шаг 6: Запуск Kubespray Playbook (только если кластер не обнаружен)"
@@ -206,6 +207,16 @@ jobs:
               echo "🧹 Шаг 8: Очистка"
               rm -f ~/.ssh/id_rsa
               echo "✅ Установка Kubernetes завершена!"
+
+      - name: 📋 Проверка наличия kubeconfig.yaml
+        run: |
+          if [ ! -f kubeconfig.yaml ]; then
+            echo "::error::Файл kubeconfig.yaml не найден!"
+            ls -la
+            exit 1
+          else
+            echo "Файл kubeconfig.yaml найден."
+          fi        
 
       - name: 📤 Сохранение kubeconfig как артефакта
         uses: actions/upload-artifact@v4
