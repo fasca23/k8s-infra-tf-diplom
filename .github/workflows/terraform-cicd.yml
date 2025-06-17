@@ -218,9 +218,9 @@ jobs:
 
       - name: 📋 Проверка наличия kubeconfig.yaml
         run: |
-          if [ ! -f kubeconfig.yaml ]; then
+          if [ ! -f ./kubespray/kubeconfig.yaml ]; then
             echo "::error::Файл kubeconfig.yaml не найден!"
-            ls -la
+            ls -la ./kubespray/
             exit 1
           else
             echo "Файл kubeconfig.yaml найден."
@@ -230,7 +230,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kubeconfig
-          path: kubeconfig.yaml
+          path: ./kubespray/kubeconfig.yaml
           retention-days: 1
           if-no-files-found: error
 
