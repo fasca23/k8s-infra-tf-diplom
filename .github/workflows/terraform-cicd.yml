@@ -260,6 +260,10 @@ jobs:
     environment: production
 
     steps:
+
+      - name: Получение кода
+        uses: actions/checkout@v4
+
       - name: 📥 Загрузка kubeconfig
         uses: actions/download-artifact@v4
         with:
@@ -336,6 +340,10 @@ jobs:
 
       - name: 📂 Применение дополнительных манифестов
         run: |
+
+          echo "📍 Текущая директория: $(pwd)"
+          ls -la
+
           cd k8s-settings
           kubectl apply -f grafana-nodeport.yaml
           kubectl apply -f deployment-account.yaml
