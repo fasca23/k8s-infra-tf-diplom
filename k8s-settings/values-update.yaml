@@ -1,0 +1,18 @@
+prometheus:
+  prometheusSpec:
+    nodeSelector:
+      kubernetes.io/hostname: node-kuber-0
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: prometheus-data
+        hostPath:
+          path: /data/prometheus
+    volumeMonunts:
+      - name: prometheus-data
+        mountPath: /prometheus

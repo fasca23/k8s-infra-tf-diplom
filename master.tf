@@ -11,6 +11,7 @@ resource "yandex_compute_instance" "cluster-k8s" {
   zone                      = element(var.subnet-zones, count.index)
   platform_id               = "standard-v3"
   allow_stopping_for_update = true
+  # core_fraction = 20
 
   # Используем прерываемые инстансы для экономии
   scheduling_policy {
@@ -33,18 +34,15 @@ resource "yandex_compute_instance" "cluster-k8s" {
     }
   }
 
-
   # Подключаем ВМ к созданным подсетям (берем сеть из списка по индексу)
   network_interface {
     subnet_id = element(local.subnet_ids, count.index)
     # Включаем NAT для доступа в интернет
     nat = true
-    # security_group_ids = [yandex_vpc_security_group.k8s-nodes-sg.id]
   }
 
   # Настройка доступа по SSH
   metadata = {
-    # ssh-keys  = "ubuntu:${file("~/.ssh/id_ed25519.pub")}"
     ssh-keys = "ubuntu:${var.ssh_public_key}"
   }
 
