@@ -111,9 +111,18 @@ jobs:
           sudo apt update && sudo apt install -y python3-pip sshpass git
           pip3 install ansible
 
-          echo "📁 Шаг 2: Клонирование Kubespray"
-          git clone https://github.com/kubernetes-sigs/kubespray.git || true
-          cd kubespray
+          echo "📁 Шаг 2: Подготовка Kubespray"
+          if [ -d "kubespray" ]; then
+            echo "Обновляем существующую копию Kubespray"
+            cd kubespray
+            git pull
+          else
+            echo "Клонируем Kubespray"
+            git clone https://github.com/kubernetes-sigs/kubespray.git
+            cd kubespray
+          fi
+          
+          echo "📦 Установка зависимостей Python"
           pip3 install -r requirements.txt
 
           echo "🔐 Шаг 3: Настройка SSH-ключа"
@@ -122,10 +131,20 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
 
           echo "🌐 Шаг 4: Тест SSH-подключения"
-          ansible -i ../kubespray/inventory/hosts.yaml all -m ping --private-key=~/.ssh/id_rsa -u ubuntu
+          ansible -i ../kubespray/inventory/hosts.yaml all -m ping --private-key=~/.ssh/id_rsa -u ubuntu || {
+            echo "::error::SSH connection failed"
+            exit 1
+          }
 
           echo "🔥 Шаг 5: Запуск Kubespray Playbook"
-          ansible-playbook -i ../kubespray/inventory/hosts.yaml cluster.yml --private-key=~/.ssh/id_rsa -u ubuntu -b
+          ansible-playbook -i ../kubespray/inventory/hosts.yaml cluster.yml \
+            --private-key=~/.ssh/id_rsa \
+            -u ubuntu \
+            -b \
+            --become-user=root || {
+              echo "::error::Kubespray deployment failed"
+              exit 1
+            }
 
           echo "🧹 Шаг 6: Очистка"
           rm -f ~/.ssh/id_rsa
