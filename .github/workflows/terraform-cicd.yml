@@ -165,20 +165,23 @@ jobs:
           done
 
           echo "🔍 Шаг 5: Проверка существующего кластера"
+
               if ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo kubectl get nodes"; then
                 echo "✅ Кластер Kubernetes уже установлен и работает"
-                
-
                 echo "📋 Получение kubeconfig уже работающего кластера"
-                ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo cat /etc/kubernetes/admin.conf" > kubeconfig.yaml
-                
+                TMP_REMOTE_CONF="/home/ubuntu/kubeconfig.yaml"
+                echo "📋 Подготавливаем admin.conf на удалённом сервере $MASTER_NODE..."
+                  ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "
+                    sudo cp /etc/kubernetes/admin.conf $TMP_REMOTE_CONF &&
+                    sudo chown ubuntu:ubuntu $TMP_REMOTE_CONF
+                  "
+                scp -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE:$TMP_REMOTE_CONF "${GITHUB_WORKSPACE}/kubeconf
                 echo "🔒 Настройка прав доступа к kubeconfig"
-                chmod 600 kubeconfig.yaml
-                
+                chmod 600 "${GITHUB_WORKSPACE}/kubeconfig.yaml
                 mkdir -p ~/.kube
-                cp kubeconfig.yaml ~/.kube/config
-                
+                cp "${GITHUB_WORKSPACE}/kubeconfig.yaml" ~/.kube/config
                 echo "🧹 Шаг 6: Очистка"
+                ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "rm -f $TMP_REMOTE_CONF"
                 rm -f ~/.ssh/id_rsa
                 exit 0
               fi
@@ -195,17 +198,22 @@ jobs:
                 }
 
               echo "📋 Шаг 7: Получение kubeconfig"
-              MASTER_NODE=$(yq eval '.all.hosts.*.ansible_host | select(. == "*master*" or . == "*control*") | .[0]' ../kubespray/inventory/hosts.yaml)
-              ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo cat /etc/kubernetes/admin.conf" > kubeconfig.yaml
               
+              TMP_REMOTE_CONF="/home/ubuntu/kubeconfig.yaml"
+              echo "📋 Подготавливаем admin.conf на удалённом сервере $MASTER_NODE..."
+                ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "
+                  sudo cp /etc/kubernetes/admin.conf $TMP_REMOTE_CONF &&
+                  sudo chown ubuntu:ubuntu $TMP_REMOTE_CONF
+                "
+              scp -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE:$TMP_REMOTE_CONF "${GITHUB_WORKSPACE}/kubeconf
               echo "🔒 Настройка прав доступа к kubeconfig"
-              chmod 600 kubeconfig.yaml
-              
+              chmod 600 "${GITHUB_WORKSPACE}/kubeconfig.yaml
               mkdir -p ~/.kube
-              cp kubeconfig.yaml ~/.kube/config
-              
-              echo "🧹 Шаг 8: Очистка"
+              cp "${GITHUB_WORKSPACE}/kubeconfig.yaml" ~/.kube/config
+              echo "🧹 Шаг 6: Очистка"
+              ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "rm -f $TMP_REMOTE_CONF"
               rm -f ~/.ssh/id_rsa
+
               echo "✅ Установка Kubernetes завершена!"
 
       - name: 📋 Проверка наличия kubeconfig.yaml
