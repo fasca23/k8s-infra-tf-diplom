@@ -275,7 +275,7 @@ jobs:
       - name: Проверка inventory-файла
         run: |
           if [ ! -f "kubespray/inventory/hosts.yaml" ]; then
-            echo "::error::Inventory file not found at kubespray/inventory/hosts.yaml"
+            echo "::error::Inventory file not found at ./kubespray/inventory/hosts.yaml"
             echo "Available files:"
             ls -R kubespray || true
             exit 1
@@ -287,7 +287,7 @@ jobs:
       - name: 🔓 Расшифровка kubeconfig
         run: |
           # Получаем первый IP из hosts.yaml
-          MASTER_NODE=$(yq eval '.all.hosts.*.ansible_host' ../kubespray/inventory/hosts.yaml | head -n1)
+          MASTER_NODE=$(yq eval '.all.hosts.*.ansible_host' ./kubespray/inventory/hosts.yaml | head -n1)
 
           # Проверяем, что IP найден
           if [ -z "$MASTER_NODE" ]; then
