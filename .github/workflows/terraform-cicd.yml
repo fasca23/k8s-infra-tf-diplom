@@ -268,10 +268,22 @@ jobs:
 
       - name: 🔓 Расшифровка kubeconfig
         run: |
+          # Получаем IP мастер-ноды
+          if [ -z "$MASTER_NODE" ]; then
+            echo "::error::Не удалось найти IP мастер-ноды в inventory"
+            exit 1
+          fi
+
+          # Расшифровываем kubeconfig
           echo "${{ secrets.GPG_PRIVATE_KEY }}" > private.key
           gpg --import private.key
           gpg --output ./kubeconfig.yaml --decrypt ./kubespray/kubeconfig.gpg
           rm private.key
+
+          # Обновляем kubeconfig
+          sed -i "s|https://127.0.0.1:6443|https://${MASTER_NODE}:6443|"  ./kubeconfig.yaml
+
+          # Копируем в ~/.kube
           mkdir -p ~/.kube
           cp ./kubeconfig.yaml ~/.kube/config
           chmod 600 ~/.kube/config
