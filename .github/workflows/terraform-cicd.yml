@@ -1,26 +1,25 @@
-name: Infrastructure Pipeline
+name: Terraform CI/CD
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Select action'
+        description: 'Action (plan/apply/destroy/deploy-k8s)'
         required: true
         type: choice
         options:
-          - terraform-plan
-          - terraform-apply
-          - terraform-destroy
-          - deploy-kubernetes
+          - plan
+          - apply
+          - destroy
+          - deploy-k8s
       confirm:
-        description: 'Type "yes" to confirm (required for apply/destroy/deploy)'
+        description: 'Введите «yes» для подтверждения (требуется для apply/destroy/deploy-k8s)'
         required: false
         default: 'no'
 
 jobs:
   terraform:
-    name: 'Terraform Operations'
-    if: contains(github.event.inputs.action, 'terraform')
+    name: 'Terraform инфраструктура'
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -33,15 +32,15 @@ jobs:
       TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
     steps:
-      - name: Checkout code
+      - name: Получение кода
         uses: actions/checkout@v4
 
-      - name: Setup Terraform
+      - name: Установка Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.5"
 
-      - name: Terraform Init
+      - name: Инициализация Terraform
         run: |
           terraform init \
             -backend-config="endpoint=https://storage.yandexcloud.net" \
@@ -50,96 +49,98 @@ jobs:
             -backend-config="access_key=${{ secrets.YC_S3_ACCESS_KEY }}" \
             -backend-config="secret_key=${{ secrets.YC_S3_SECRET_KEY }}"
 
-      - name: Terraform Format Check
+      - name: Проверка форматирования
         run: terraform fmt -check -recursive
 
-      - name: Terraform Validate
+      - name: Валидация конфигурации
         run: terraform validate
 
-      - name: Terraform Plan
-        if: github.event.inputs.action == 'terraform-plan'
+      - name: Планирование изменений
+        if: github.event.inputs.action == 'plan' || (github.event.inputs.action == 'apply' && github.event.inputs.confirm == 'yes')
         run: terraform plan -out=tfplan
 
-      - name: Terraform Apply
-        if: github.event.inputs.action == 'terraform-apply' && github.event.inputs.confirm == 'yes'
+      - name: Применение изменений
+        if: github.event.inputs.action == 'apply' && github.event.inputs.confirm == 'yes'
         run: terraform apply -auto-approve tfplan
 
-      - name: Save Inventory Artifact
-        if: github.event.inputs.action == 'terraform-apply' && github.event.inputs.confirm == 'yes'
+      - name: План удаления
+        if: github.event.inputs.action == 'destroy' && github.event.inputs.confirm == 'yes'
+        run: terraform plan -destroy -out=tfdestroy
+
+      - name: Удаление инфраструктуры
+        if: github.event.inputs.action == 'destroy' && github.event.inputs.confirm == 'yes'
+        run: terraform apply -auto-approve tfdestroy
+
+      - name: Проверка и сохранение inventory-файла
+        if: success() && (github.event.inputs.action == 'apply' || github.event.inputs.action == 'deploy-k8s')
+        run: |
+          if [ -f "inventory/hosts.yaml" ]; then
+            mkdir -p kubespray/inventory
+            cp inventory/hosts.yaml kubespray/inventory/hosts.yaml
+          elif [ -f "kubespray/inventory/hosts.yaml" ]; then
+            echo "Inventory file already in kubespray directory"
+          else
+            echo "::warning::Inventory file not found in either inventory/hosts.yaml or kubespray/inventory/hosts.yaml"
+            exit 0
+          fi
+
+      - name: Сохранение inventory-файла как артефакта
+        if: success() && (github.event.inputs.action == 'apply' || github.event.inputs.action == 'deploy-k8s')
         uses: actions/upload-artifact@v4
         with:
           name: kubespray-inventory
           path: kubespray/inventory/hosts.yaml
           retention-days: 1
-          if-no-files-found: warn
+          if-no-files-found: ignore
 
-      - name: Terraform Destroy Plan
-        if: github.event.inputs.action == 'terraform-destroy' && github.event.inputs.confirm == 'yes'
-        run: terraform plan -destroy -out=tfdestroy
-
-      - name: Terraform Destroy
-        if: github.event.inputs.action == 'terraform-destroy' && github.event.inputs.confirm == 'yes'
-        run: terraform apply -auto-approve tfdestroy
-
-  kubernetes:
-    name: 'Deploy Kubernetes'
+  deploy-k8s:
+    name: 'Установка Kubernetes'
     needs: terraform
-    if: github.event.inputs.action == 'deploy-kubernetes' && github.event.inputs.confirm == 'yes'
+    if: github.event.inputs.action == 'deploy-k8s' && github.event.inputs.confirm == 'yes'
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-      - name: Download Inventory Artifact
+      - name: 📥 Загрузка inventory из артефакта
         uses: actions/download-artifact@v4
         with:
           name: kubespray-inventory
           path: kubespray/inventory
 
-      - name: Verify Inventory File
+      - name: Проверка inventory-файла
         run: |
-          if [ ! -f kubespray/inventory/hosts.yaml ]; then
+          if [ ! -f "kubespray/inventory/hosts.yaml" ]; then
             echo "::error::Inventory file not found at kubespray/inventory/hosts.yaml"
-            echo "Files in directory:"
-            ls -la kubespray/inventory/ || true
+            echo "Available files:"
+            ls -R kubespray || true
             exit 1
           fi
-          echo "Inventory file verified"
+          echo "Inventory file verified:"
+          cat kubespray/inventory/hosts.yaml
 
-      - name: Install Dependencies
+      - name: 🚀 Установка Kubernetes через Kubespray
         run: |
+          echo "🔄 Шаг 1: Установка зависимостей"
           sudo apt update && sudo apt install -y python3-pip sshpass git
-          pip3 install --upgrade pip ansible
+          pip3 install ansible
 
-      - name: Setup Kubespray
-        run: |
+          echo "📁 Шаг 2: Клонирование Kubespray"
           git clone https://github.com/kubernetes-sigs/kubespray.git || true
           cd kubespray
-          git checkout release-2.23  # Используйте стабильную версию
           pip3 install -r requirements.txt
 
-      - name: Configure SSH Access
-        run: |
+          echo "🔐 Шаг 3: Настройка SSH-ключа"
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          eval $(ssh-agent -s)
-          ssh-add ~/.ssh/id_rsa
 
-      - name: Test SSH Connections
-        run: |
-          cd kubespray
-          ansible -i ../kubespray/inventory/hosts.yaml all -m ping \
-            --private-key=~/.ssh/id_rsa \
-            -u ubuntu
+          echo "🌐 Шаг 4: Тест SSH-подключения"
+          ansible -i ../kubespray/inventory/hosts.yaml all -m ping --private-key=~/.ssh/id_rsa -u ubuntu
 
-      - name: Deploy Kubernetes
-        run: |
-          cd kubespray
-          ansible-playbook -i ../kubespray/inventory/hosts.yaml cluster.yml \
-            --private-key=~/.ssh/id_rsa \
-            -u ubuntu \
-            -b \
-            --become-user=root
+          echo "🔥 Шаг 5: Запуск Kubespray Playbook"
+          ansible-playbook -i ../kubespray/inventory/hosts.yaml cluster.yml --private-key=~/.ssh/id_rsa -u ubuntu -b
 
-      - name: Cleanup SSH Key
-        run: rm -f ~/.ssh/id_rsa
+          echo "🧹 Шаг 6: Очистка"
+          rm -f ~/.ssh/id_rsa
+
+          echo "✅ Установка Kubernetes завершена!"
