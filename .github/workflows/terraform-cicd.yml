@@ -139,29 +139,34 @@ jobs:
           echo "📦 Установка зависимостей Python"
           pip3 install -r requirements.txt
 
-          echo "🔐 Шаг 3: Настройка SSH-ключа"
+          echo "🔐 Шаг 3: Настройка SSH"
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          eval $(ssh-agent -s)
+          ssh-add ~/.ssh/id_rsa
 
-          echo "🌐 Шаг 4: Тест SSH-подключения"
-          ansible -i inventory/hosts.yaml all -m ping --private-key=~/.ssh/id_rsa -u ubuntu || {
-            echo "::error::SSH connection failed"
-            exit 1
-          }
+          echo "🌐 Шаг 4: Проверка подключения к нодам"
+          for ip in $(yq eval '.all.hosts.*.ansible_host' ../kubespray/inventory/hosts.yaml); do
+            echo "Проверяем подключение к $ip"
+            ssh-keyscan -H $ip >> ~/.ssh/known_hosts
+            ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@$ip "echo SSH connection successful" || {
+              echo "::error::Не удалось подключиться к $ip"
+              exit 1
+            }
+          done
 
           echo "🔥 Шаг 5: Запуск Kubespray Playbook"
-          ansible-playbook -i inventory/hosts.yaml cluster.yml \
+          ansible-playbook -i ../kubespray/inventory/hosts.yaml cluster.yml \
             --private-key=~/.ssh/id_rsa \
             -u ubuntu \
             -b \
-            --become-user=root || {
-              echo "::error::Kubespray deployment failed"
+            --become-user=root \
+            --ssh-common-args="-o StrictHostKeyChecking=no" || {
+              echo "::error::Ошибка развертывания Kubernetes"
               exit 1
             }
 
           echo "🧹 Шаг 6: Очистка"
           rm -f ~/.ssh/id_rsa
-          rm -rf /tmp/kubespray-backup
-
           echo "✅ Установка Kubernetes завершена!"
