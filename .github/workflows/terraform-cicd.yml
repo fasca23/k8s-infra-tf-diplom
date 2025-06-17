@@ -4,16 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Action (plan/apply/destroy/deploy-k8s)'
+        description: 'Action (plan/apply/destroy/apply-and-deploy)'
         required: true
         type: choice
         options:
           - plan
           - apply
           - destroy
-          - deploy-k8s
+          - apply-and-deploy
       confirm:
-        description: 'Введите «yes» для подтверждения (требуется для apply/destroy/deploy-k8s)'
+        description: 'Введите «yes» для подтверждения (требуется для apply/destroy/apply-and-deploy)'
         required: false
         default: 'no'
 
@@ -56,11 +56,11 @@ jobs:
         run: terraform validate
 
       - name: Планирование изменений
-        if: github.event.inputs.action == 'plan' || (github.event.inputs.action == 'apply' && github.event.inputs.confirm == 'yes')
+        if: contains(github.event.inputs.action, 'plan') || contains(github.event.inputs.action, 'apply')
         run: terraform plan -out=tfplan
 
       - name: Применение изменений
-        if: github.event.inputs.action == 'apply' && github.event.inputs.confirm == 'yes'
+        if: (github.event.inputs.action == 'apply' || github.event.inputs.action == 'apply-and-deploy') && github.event.inputs.confirm == 'yes'
         run: terraform apply -auto-approve tfplan
 
       - name: План удаления
@@ -72,18 +72,18 @@ jobs:
         run: terraform apply -auto-approve tfdestroy
 
       - name: Сохранение inventory-файла как артефакта
-        if: success() && (github.event.inputs.action == 'apply' || github.event.inputs.action == 'deploy-k8s')
+        if: success() && (github.event.inputs.action == 'apply-and-deploy' || github.event.inputs.action == 'apply')
         uses: actions/upload-artifact@v4
         with:
           name: kubespray-inventory
           path: kubespray/inventory/hosts.yaml
           retention-days: 1
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   deploy-k8s:
     name: 'Установка Kubernetes'
     needs: terraform
-    if: github.event.inputs.action == 'deploy-k8s' && github.event.inputs.confirm == 'yes'
+    if: (github.event.inputs.action == 'deploy-k8s' || github.event.inputs.action == 'apply-and-deploy') && github.event.inputs.confirm == 'yes'
     runs-on: ubuntu-latest
     environment: production
 
