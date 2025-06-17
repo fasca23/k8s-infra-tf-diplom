@@ -147,6 +147,8 @@ jobs:
           ssh-add ~/.ssh/id_rsa
 
           echo "🌐 Шаг 4: Проверка подключения к нодам"
+          i=0
+          MASTER_NODE=""
           for ip in $(yq eval '.all.hosts.*.ansible_host' ../kubespray/inventory/hosts.yaml); do
             echo "Проверяем подключение к $ip"
             ssh-keyscan -H $ip >> ~/.ssh/known_hosts
@@ -154,10 +156,15 @@ jobs:
               echo "::error::Не удалось подключиться к $ip"
               exit 1
             }
+             
+            # Сохраняем первый IP как мастер-ноду
+            if [ $i -eq 0 ]; then
+              MASTER_NODE="$ip"
+              i=1
+            fi   
           done
 
           echo "🔍 Шаг 5: Проверка существующего кластера"
-              MASTER_NODE=$(yq eval '.all.hosts | map(select(has("etcd") or has("kube-control-plane"))) | .[0].ansible_host' ../kubespray/inventory/hosts.yaml)
               if ssh -i ~/.ssh/id_rsa ubuntu@$MASTER_NODE "sudo kubectl get nodes"; then
                 echo "✅ Кластер Kubernetes уже установлен и работает"
                 
